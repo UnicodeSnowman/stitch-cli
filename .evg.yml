@@ -49,7 +49,9 @@ functions:
       params:
         script: |
           mkdir -p server/src/github.com/10gen
-            git clone git@github.com:10gen/stitch.git server/src/github.com/10gen/stitch
+          git clone git@github.com:unicodesnowman/stitch.git server/src/github.com/10gen/stitch
+          cd server/src/github.com/10gen/stitch
+          git checkout debug/whitelist-permissions
     - command: shell.exec
       params:
         script: |
