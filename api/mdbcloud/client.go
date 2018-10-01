@@ -150,7 +150,7 @@ func (client *simpleClient) do(
 	req.Header.Add("User-Agent", "MongoDB-Stitch-CLI")
 
 	cl := http.Client{}
-	cl.Timeout = time.Second * 5
+	cl.Timeout = time.Second * 20
 	if client.transport == nil {
 		if needAuth {
 			return nil, errors.New("expected to have auth context")
