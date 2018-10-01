@@ -68,22 +68,14 @@ func (client *simpleClient) Groups() ([]Group, error) {
 		nil,
 		true,
 	)
+	errPrefix := "failed to fetch available Projects: %s"
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(errPrefix, err)
 	}
 	defer resp.Body.Close()
 
-	errPrefix := fmt.Sprintf("%s: failed to fetch available Project IDs", resp.Status)
-
-	if resp.StatusCode == http.StatusForbidden {
-		return nil, fmt.Errorf(
-			"%s. Please check your Atlas API Whitelist entries at https://cloud.mongodb.com/v2#/account/publicApi to ensure that requests from this IP address are allowed",
-			errPrefix,
-		)
-	}
-
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New(errPrefix)
+		return nil, fmt.Errorf(errPrefix, resp.Status)
 	}
 
 	dec := json.NewDecoder(resp.Body)
@@ -102,16 +94,14 @@ func (client *simpleClient) GroupByName(groupName string) (*Group, error) {
 		nil,
 		true,
 	)
+	errPrefix := "failed to fetch Project '%s': %s"
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(errPrefix, groupName, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		if resp.StatusCode == http.StatusNotFound {
-			return nil, fmt.Errorf("no project found with name %s", groupName)
-		}
-		return nil, fmt.Errorf("failed to fetch available Project IDs: %s", resp.Status)
+		return nil, fmt.Errorf(errPrefix, groupName, resp.Status)
 	}
 
 	dec := json.NewDecoder(resp.Body)
@@ -121,6 +111,31 @@ func (client *simpleClient) GroupByName(groupName string) (*Group, error) {
 	}
 
 	return &groupResp, nil
+}
+
+// DeleteDatabaseUser deletes the database user with the provided username
+func (client *simpleClient) DeleteDatabaseUser(groupID, username string) error {
+	resp, err := client.do(
+		http.MethodDelete,
+		fmt.Sprintf("%s/api/atlas/v1.0/groups/%s/databaseUsers/admin/%s",
+			client.atlasAPIBaseURL,
+			groupID,
+			username,
+		),
+		nil,
+		true,
+	)
+	errPrefix := "failed to delete User '%s': %s"
+	if err != nil {
+		return fmt.Errorf(errPrefix, username, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted {
+		return fmt.Errorf(errPrefix, username, resp.Status)
+	}
+
+	return nil
 }
 
 func (client *simpleClient) do(
@@ -178,28 +193,13 @@ func (client *simpleClient) do(
 		return nil, fmt.Errorf(errPrefix, cloudErr.Detail)
 	}
 
+	if resp.StatusCode == http.StatusForbidden {
+		defer resp.Body.Close()
+		return nil, fmt.Errorf(
+			"(%s) Please check your Atlas API Whitelist entries at https://cloud.mongodb.com/v2#/account/publicApi to ensure that requests from this IP address are allowed",
+			resp.Status,
+		)
+	}
+
 	return resp, nil
-}
-
-// DeleteDatabaseUser deletes the database user with the provided username
-func (client *simpleClient) DeleteDatabaseUser(groupID, username string) error {
-	resp, err := client.do(
-		http.MethodDelete,
-		fmt.Sprintf("%s/api/atlas/v1.0/groups/%s/databaseUsers/admin/%s",
-			client.atlasAPIBaseURL,
-			groupID,
-			username,
-		),
-		nil,
-		true,
-	)
-	if err != nil {
-		return err
-	}
-
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("error deleting database user '%s'", username)
-	}
-	return nil
 }
