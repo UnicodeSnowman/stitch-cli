@@ -57,20 +57,6 @@
         }
       },
       "inheritedFeatureFlags": ["mongodb_service"]
-    },
-    {
-      "name": "charts",
-      "admin": {
-        "actionRoleMappings": {
-          "read": ["GLOBAL_OWNER", "GLOBAL_READ_ONLY", "GLOBAL_STITCH_ADMIN"],
-          "write": ["GLOBAL_STITCH_ADMIN"]
-        }
-      },
-      "inheritedFeatureFlags": [
-        "universal_atlas_cluster_linking",
-        "client_mongodb_cloud_auth",
-        "mongodb_service"
-      ]
     }
   ],
   "auth": {
