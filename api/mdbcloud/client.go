@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"time"
 
@@ -14,10 +15,16 @@ import (
 	"github.com/edaniels/digest"
 )
 
-var errCommonServerError = fmt.Errorf("an unexpected server error has occurred")
+var errCommonServerError = "an unexpected server error has occurred"
 
 type groupResponse struct {
 	Results []Group `json:"results"`
+}
+
+type errResponse struct {
+	Detail    string `json:"detail"`
+	Error     int    `json:"error"`
+	ErrorCode string `json:"errorCode"`
 }
 
 // Group represents a mongodb atlas group
@@ -66,8 +73,17 @@ func (client *simpleClient) Groups() ([]Group, error) {
 	}
 	defer resp.Body.Close()
 
+	errPrefix := fmt.Sprintf("%s: failed to fetch available Project IDs", resp.Status)
+
+	if resp.StatusCode == http.StatusForbidden {
+		return nil, fmt.Errorf(
+			"%s. Please check your Atlas API Whitelist entries at https://cloud.mongodb.com/v2#/account/publicApi to ensure that requests from this IP address are allowed",
+			errPrefix,
+		)
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch available Project IDs: %s", resp.Status)
+		return nil, errors.New(errPrefix)
 	}
 
 	dec := json.NewDecoder(resp.Body)
@@ -124,7 +140,7 @@ func (client *simpleClient) do(
 
 	req, err := http.NewRequest(method, url, bodyReader)
 	if err != nil {
-		return nil, errCommonServerError
+		return nil, errors.New(errCommonServerError)
 	}
 
 	if body != nil {
@@ -145,12 +161,21 @@ func (client *simpleClient) do(
 
 	resp, err := cl.Do(req)
 	if err != nil {
-		return nil, errCommonServerError
+		if netErr, isNetErr := err.(net.Error); isNetErr && netErr.Timeout() {
+			return nil, fmt.Errorf(errCommonServerError+": request timed out after %s", cl.Timeout.String())
+		}
+		return nil, errors.New(errCommonServerError)
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		resp.Body.Close()
-		return nil, fmt.Errorf("failed to authenticate with MongoDB Cloud API")
+		defer resp.Body.Close()
+		var cloudErr errResponse
+		dec := json.NewDecoder(resp.Body)
+		errPrefix := "failed to authenticate with MongoDB Cloud API: %s"
+		if err := dec.Decode(&cloudErr); err != nil {
+			return nil, fmt.Errorf(errPrefix, err)
+		}
+		return nil, fmt.Errorf(errPrefix, cloudErr.Detail)
 	}
 
 	return resp, nil
